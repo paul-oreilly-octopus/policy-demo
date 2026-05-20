@@ -1,0 +1,14 @@
+{
+  "targets": {
+    "corp-pos-backend": "Machines-161",
+    "corp-payments-backend": "Machines-162",
+    "corp-mobile-api": "Machines-163",
+    "corp-loyalty": "Machines-164",
+    "corp-marketing": "Machines-165",
+    "corp-pci-vault": "Machines-166",
+    "store-nz-auckland-01": "Machines-167",
+    "store-au-sydney-01": "Machines-168",
+    "store-uk-london-01": "Machines-169",
+    "store-us-newyork-01": "Machines-170"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "SpaceId": "Spaces-142",
+  "SpaceName": "PolicyDemo",
+  "environments": {
+    "Dev": "Environments-141",
+    "Test": "Environments-142",
+    "Cloud-Prod": "Environments-143",
+    "Cloud-Prod-BreakGlass": "Environments-144",
+    "Markets": "Environments-145"
+  },
+  "project_groups": {
+    "Default Project Group": "ProjectGroups-182",
+    "Admin": "ProjectGroups-183"
+  },
+  "lifecycles": {
+    "Standard Release": "Lifecycles-163",
+    "PCI Standard": "Lifecycles-164",
+    "PCI BreakGlass": "Lifecycles-165"
+  },
+  "tag_sets": {
+    "Region": {
+      "Id": "TagSets-67",
+      "Tags": {
+        "APAC": "Region/APAC",
+        "EMEA": "Region/EMEA",
+        "AMER": "Region/AMER"
+      }
+    },
+    "Acquisition": {
+      "Id": "TagSets-68",
+      "Tags": {
+        "native": "Acquisition/native",
+        "acquired-crusty": "Acquisition/acquired-crusty"
+      }
+    }
+  }
+}

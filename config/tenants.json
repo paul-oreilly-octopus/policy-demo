@@ -1,0 +1,8 @@
+{
+  "tenants": {
+    "MMI-NZ-Auckland": "Tenants-21",
+    "MMI-AU-Sydney": "Tenants-22",
+    "MMI-UK-London": "Tenants-23",
+    "MMI-US-NewYork": "Tenants-24"
+  }
+}
