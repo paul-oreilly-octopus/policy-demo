@@ -22,5 +22,13 @@
   "crusty-croissant-pos": {
     "ProjectId": "Projects-146",
     "ProjectSlug": "crusty-croissant-pos"
+  },
+  "pci-card-data-vault": {
+    "ProjectId": "Projects-147",
+    "ProjectSlug": "pci-card-data-vault",
+    "Channels": {
+      "Default": "Channels-167",
+      "Break Glass": "Channels-168"
+    }
   }
 }
