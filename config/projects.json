@@ -18,5 +18,9 @@
   "loyalty-rewards-service": {
     "ProjectId": "Projects-145",
     "ProjectSlug": "loyalty-rewards-service"
+  },
+  "crusty-croissant-pos": {
+    "ProjectId": "Projects-146",
+    "ProjectSlug": "crusty-croissant-pos"
   }
 }
