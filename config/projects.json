@@ -6,5 +6,9 @@
   "holiday-promo-blitz": {
     "ProjectId": "Projects-142",
     "ProjectSlug": "holiday-promo-blitz"
+  },
+  "payment-gateway": {
+    "ProjectId": "Projects-143",
+    "ProjectSlug": "payment-gateway"
   }
 }
