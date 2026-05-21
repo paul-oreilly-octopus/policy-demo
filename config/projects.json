@@ -10,5 +10,13 @@
   "payment-gateway": {
     "ProjectId": "Projects-143",
     "ProjectSlug": "payment-gateway"
+  },
+  "customer-mobile-app": {
+    "ProjectId": "Projects-144",
+    "ProjectSlug": "customer-mobile-app"
+  },
+  "loyalty-rewards-service": {
+    "ProjectId": "Projects-145",
+    "ProjectSlug": "loyalty-rewards-service"
   }
 }
