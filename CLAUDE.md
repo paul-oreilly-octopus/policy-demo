@@ -8,14 +8,15 @@ This is **not a real application** — Cloud Region targets stand in for real in
 
 Models the runbook-driven mock-release pattern from `oil-vendor-demo` so the demo is repeatable and resettable.
 
-## Demo framing: two governance primitives
+## Demo framing: three governance primitives
 
-Octopus 2026.2 Platform Hub exposes **two** primitives for centrally governing many spaces and projects:
+Octopus 2026.2 Platform Hub exposes **three** primitives for centrally governing many spaces and projects:
 
 1. **Deployment Freezes** — API-managed time-based or permanent blocks on deployments. Scope dimensions: Project + Environment, or Tenant + Project + Environment. Native recurrence supports Daily / Weekly / Monthly cycles.
-2. **Process Templates** — CaC-managed shared deployment processes. Consuming projects inherit the steps. The template *is* the policy — when a project consumes a hub template, the included steps (approvals, scans, validators) are enforced.
+2. **Process Templates** — CaC-managed shared deployment processes. Consuming projects inherit the steps. Provides the steps required to be compliant.
+3. **Policies (Rego)** — CaC-managed Open Policy Agent rules in `.octopus/policies/*.ocl`. Each policy has a `conditions` block (Rego `result` rule) and a `scope` block (Rego `evaluate` rule). `violation_action` is `"warn"` or `"block"`. Asserts the steps/variables/conditions that must be true; does *not* provide them.
 
-The demo's seven pipelines compose these two primitives many ways. There is **no separate "required step template" or "required variables" policy type** — all such enforcement flows through a Process Template that the project consumes.
+The relationship: **process templates make it easy to be compliant, policies make it required**. Belt and braces — the template gives engineers a clean recipe, the policy proves to auditors the recipe was followed. Demo pipelines M2-M5 each have both a process template *and* a policy.
 
 ## Architecture
 
@@ -96,15 +97,17 @@ The `permanent-break-glass-only` tag is signaling only — there's no policy tha
 
 Each project is **deliberately non-compliant** at setup; demo flow is: try to deploy → blocked → fix → ship.
 
-| # | Project | Tenanted | Primitive | Mechanism | Block | Fix |
+| # | Project | Tenanted | Primitive(s) | Mechanism | Block | Fix |
 |---|---|---|---|---|---|---|
-| 1 | `holiday-promo-blitz` | Yes | Deployment Freeze | Runbook-driven 5-in-10 rolling freeze on Markets env (native recurrence is daily-min, so a runbook rewrites Start/End every 5 min) | Currently frozen | Wait, or use the project's Break Glass channel + justification |
-| 2 | `payment-gateway` | No | Process Template | Project initially uses a basic "deploy" process. Hub provides `governed-cloud-prod-deploy` template with mandatory manual-intervention approval step. | Project doesn't consume the template — auditor flags it | Consume the hub template |
-| 3 | `customer-mobile-app` | Yes | Process Template | Hub provides `governed-customer-app-deploy` template with mandatory security-scan step | Project doesn't consume the template | Consume the hub template |
-| 4 | `loyalty-rewards-service` | Yes | Process Template | Hub provides `governed-customer-app-deploy` template that includes a `Verify FinOps Variables` step which fails if `cost_centre` or `owner_email` aren't set | Crusty tenant has neither variable set | Set tenant variables |
-| 5 | `crusty-croissant-pos` | Yes (one tenant) | Process Template | Hub provides `eu-region-deploy` template with a GDPR-data-residency step. Step always runs and requires `gdpr_data_residency_region` variable. | Project doesn't consume `eu-region-deploy` (currently uses base template — visibly skips GDPR for an EU tenant) | Switch project to consume `eu-region-deploy` → block at variable check → set variable → ships |
-| 6 | — (meta segment) | — | — | Audit trail walkthrough — git log on hub repo + Octopus audit log + tail of notification log | — | — |
-| 7 | `pci-card-data-vault` | No | Deployment Freeze + Channel-routed environments | Permanent freeze (2026 → 2099) on Cloud-Prod env for this project. Two channels: Default deploys to Cloud-Prod (frozen), Break Glass deploys to Cloud-Prod-BreakGlass (not frozen). | Default channel → frozen at Cloud-Prod | Use Break Glass channel; requires `pci_change_ticket` (CHG\d{7}), `PCI Change Approvers` team approval, post-deploy notification |
+| 1 | `holiday-promo-blitz` | Yes | Deployment Freeze | Runbook-driven 5-in-10 rolling freeze on Markets env (native recurrence is daily-min, so a runbook rewrites Start/End every 5 min) | Currently frozen | Wait |
+| 2 | `payment-gateway` | No | Process Template + **Policy** | Hub Policy `manual-approval-for-prod-deploy` requires an `Octopus.Manual` step in payment-gateway Cloud-Prod deploys. Hub Process Template `governed-cloud-prod-deploy` provides such a step out-of-the-box. | Project's baseline process has no manual intervention; policy fires | Consume the hub template (or add an inline Octopus.Manual step) |
+| 3 | `customer-mobile-app` | Yes | Process Template + **Policy** | Hub Policy `mandatory-security-scan` requires a step whose name contains "Security Scan" at Test. Hub Process Template `governed-customer-app-deploy` provides one. | Project's baseline has no scan; policy fires at Test | Consume the hub template |
+| 4 | `loyalty-rewards-service` | Yes | Process Template + **Policy** | Hub Policy `required-finops-variables` requires `cost_centre` and `owner_email` variables to resolve non-empty. Native MMI tenants have them set; Crusty tenant doesn't. | Crusty tenant deploy → policy fires (variables empty) | Set per-tenant variables on the project |
+| 5 | `crusty-croissant-pos` | Yes (one tenant) | Process Template + **Policy** | Hub Policy `gdpr-step-for-emea-tenants` (scoped by tenant tag `Region/EMEA`) requires a step whose name contains "GDPR". Hub Process Template `eu-region-deploy` provides such a step. | Crusty tenant connected (EMEA tag) → policy fires (no GDPR step) | Consume `eu-region-deploy` → set `gdpr_data_residency_region` variable |
+| 6 | — (meta segment) | — | — | Audit trail walkthrough — git log on hub repo (covers both templates AND policies) + Octopus audit log + notification log | — | — |
+| 7 | `pci-card-data-vault` | No | Deployment Freeze + Channel-routed environments | Permanent freeze (2026 → 2099) on Cloud-Prod env. Two channels: Default deploys to Cloud-Prod (frozen), Break Glass deploys to Cloud-Prod-BreakGlass (not frozen). | Default channel → frozen at Cloud-Prod | Use Break Glass channel; requires `pci_change_ticket` (CHG\d{7}), `PCI Change Approvers` team approval, post-deploy notification |
+
+All policies live in `.octopus/policies/*.ocl` in the hub repo, with Rego scopes that fire only for the relevant project (and tenant tag for #5) so demo segments don't cross-contaminate.
 
 ### Break-glass mechanism
 

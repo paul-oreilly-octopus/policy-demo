@@ -55,6 +55,61 @@ Triggers automatically use whatever is currently published, but manual API runs 
 
 `POST /api/spaces` with `SpaceManagersTeamMembers: []` rejects with "select either teams and/or users as managers." Always include the current user (`GET /users/me`) as a manager.
 
+## Platform Hub Policy OCL schema
+
+Discovered after the initial schema verification missed it. The `compliance-policy-test-evaluation` feature toggle gates the *evaluation engine* — not the authoring path. Policies can be authored (UI or hand-written OCL) and committed to the hub repo even when the engine is off; they show "inactive" in the UI until evaluation is enabled.
+
+File location: `.octopus/policies/<slug_with_underscores>.ocl`. The filename slug must match the Rego `package` directive inside.
+
+Top-level OCL blocks:
+
+```
+name = "policy-name-with-dashes"    # display name
+violation_action = "warn" | "block" # how Octopus reacts when result.allowed=false
+
+conditions {
+    rego = <<-EOT
+        package <slug_with_underscores>
+
+        default result := {"allowed": false, "reason": "..."}
+
+        result := {"allowed": true} if { ... }
+    EOT
+}
+
+scope {
+    rego = <<-EOT
+        package <same_slug>
+
+        default evaluate := false   # or true for "all deployments"
+
+        evaluate if {
+            input.Project.Slug == "..."
+            input.Environment.Name == "..."
+        }
+    EOT
+}
+```
+
+Rego inputs (confirmed):
+- `input.Steps` — array, each with `Id`, `Name`, `ActionType`
+- `input.SkippedSteps` — array of step IDs being skipped
+- `input.Environment.Name` — environment name
+- `input.Space.Id` — space ID
+- `input.Project.Slug` — project slug
+- `input.Tenant.Tags` — array of canonical tag strings (e.g. `"Region/EMEA"`)
+- `input.Variables.<name>` — resolved project variables for the current scope
+
+Default for `result` is `{"allowed": false}` — policies are deny-by-default; the conditions block describes when to *allow*. The `violation_action = "warn"` keeps it observable without blocking; `"block"` enforces hard.
+
+Schema discovered by reading `/.octopus/policies/manual_approval_for_prod_deploy.ocl` authored via the UI starter wizard. There's no API endpoint surfaced under `/api/policies` even when the engine is enabled — they're CaC-only.
+
+## Feature-toggle discovery
+
+When the API surface seems to be missing a feature documented elsewhere, check `/api/configuration/feature-toggles` BEFORE concluding the feature is absent. Toggles starting with `compliance-`, `platform-hub-`, or named after a feature category often gate visibility of an entire endpoint family.
+
+In this case the `compliance-policy-test-evaluation` toggle was disabled, hiding the policy-evaluation engine from the API. Authoring still worked through the UI/Git path. Future me: always grep feature-toggles when a feature seems missing.
+
 ## API key file format
 
 `~/dev/claude/secrets/taniwha.octopus.app/api_key` is a YAML-ish file with named fields. Extract the value with:
