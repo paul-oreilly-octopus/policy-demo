@@ -2,5 +2,9 @@
   "Management": {
     "ProjectId": "Projects-141",
     "ProjectSlug": "management"
+  },
+  "holiday-promo-blitz": {
+    "ProjectId": "Projects-142",
+    "ProjectSlug": "holiday-promo-blitz"
   }
 }

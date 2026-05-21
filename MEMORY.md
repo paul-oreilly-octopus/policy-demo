@@ -4,7 +4,7 @@ Topic-organised learnings from building and running the Muffin Man Inc Policy De
 
 ## Topics
 
-*(none yet — populated as gotchas and patterns are captured)*
+- [Octopus 2026.2 API gotchas](gotchas-octopus.md) — freezes are instance-level (not space-scoped), runbook triggers use `EnvironmentIds` not `TargetEnvironmentIds`, snapshot names must be unique, runbooks need `Environments: [...]` to run, etc.
 
 ## Conventions
 
