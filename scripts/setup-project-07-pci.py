@@ -31,6 +31,19 @@ PROJECT_DESCRIPTION = (
 
 PERMANENT_FREEZE_NAME = "pci-card-data-vault-permanent-freeze"
 
+# Server-side prepare step ensures Dev/Test phases aren't empty on either
+# channel. Without this, the Default channel's deploy step (Cloud-Prod
+# only) and the Break Glass channel's steps (Cloud-Prod-BreakGlass only)
+# leave Dev/Test with nothing to run, and Octopus refuses to create the
+# deployment. Runs in every env, both channels, no targets.
+PREPARE_SCRIPT = """\
+$env = $OctopusParameters['Octopus.Environment.Name']
+$release = $OctopusParameters['Octopus.Release.Number']
+$channel = $OctopusParameters['Octopus.Release.Channel.Name']
+Write-Host "[MOCK] Preparing pci-card-data-vault $release for $env (channel=$channel)"
+Start-Sleep -Seconds 1
+"""
+
 # Default channel deploy step — used by both channels; channel-scoping is on
 # the manual-intervention + notification steps.
 DEPLOY_SCRIPT = """\
@@ -141,8 +154,78 @@ def set_deployment_process(project: dict, foundation: dict, channels: dict[str, 
     cloud_prod_bg = foundation["environments"]["Cloud-Prod-BreakGlass"]
     pci_team = o.load_ids("teams.json")["teams"]["PCI Change Approvers"]
 
+    validate_ticket_script = (
+        '$ErrorActionPreference = "Stop"\n'
+        '$ticket = $OctopusParameters["pci_change_ticket"]\n'
+        'if ([string]::IsNullOrWhiteSpace($ticket)) {\n'
+        '    Write-Error "Break Glass channel deploys require pci_change_ticket to be set. '
+        'Provide a value matching CHG\\d{7} when creating the release or starting the deploy."\n'
+        '    exit 1\n'
+        '}\n'
+        'if ($ticket -notmatch "^CHG\\d{7}$") {\n'
+        '    Write-Error ("Break Glass channel deploys require pci_change_ticket to match CHG\\d{7}. Got: $ticket")\n'
+        '    exit 1\n'
+        '}\n'
+        'Write-Host "PCI change ticket validated: $ticket"\n'
+    )
+
     steps = [
-        # Step 1: Approval (Break Glass channel only)
+        # Step 1: Prepare (both channels, all envs, no targets) — keeps
+        # Dev/Test phases non-empty on both channels.
+        {
+            "Name": "Prepare release",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Prepare release",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": PREPARE_SCRIPT,
+                    "Octopus.Action.RunOnServer": "true",
+                },
+                "Packages": [],
+            }],
+        },
+        # Step 2: Validate PCI change ticket (Break Glass channel only).
+        # Channel-scoped validation lets us require the ticket for Break
+        # Glass deploys without forcing it on Default channel via a
+        # prompt-Required flag (Octopus enforces prompt-Required across
+        # all channels).
+        {
+            "Name": "Validate PCI change ticket",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Validate PCI change ticket",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [cloud_prod_bg],
+                "ExcludedEnvironments": [],
+                "Channels": [channels["Break Glass"]],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": validate_ticket_script,
+                    "Octopus.Action.RunOnServer": "true",
+                },
+                "Packages": [],
+            }],
+        },
+        # Step 3: Approval (Break Glass channel only)
         {
             "Name": "Approve break-glass deploy",
             "PackageRequirement": "LetOctopusDecide",
@@ -236,7 +319,14 @@ def set_deployment_process(project: dict, foundation: dict, channels: dict[str, 
 
 
 def set_pci_ticket_variable(project: dict) -> None:
-    """Add a `pci_change_ticket` project variable with a regex prompt."""
+    """Add a `pci_change_ticket` project variable with a (non-required) prompt.
+
+    The prompt is *not* marked Required because Octopus enforces prompt-
+    Required at deployment-creation time across all channels — that would
+    block Default-channel deploys (Dev/Test) which never need a CHG ticket.
+    Validation that the value matches CHG\\d{7} happens at deploy time in
+    a Break Glass channel-scoped script step (see set_deployment_process).
+    """
     var_set_id = project["VariableSetId"]
     var_set = o.get(f"/variables/{var_set_id}")
     by_name = {v.get("Name"): v for v in var_set["Variables"]}
@@ -249,9 +339,9 @@ def set_pci_ticket_variable(project: dict) -> None:
         "Type": "String",
         "IsEditable": True,
         "Prompt": {
-            "Required": True,
+            "Required": False,
             "Label": "PCI Change Ticket",
-            "Description": "Must match CHG\\d{7} — e.g. CHG1234567.",
+            "Description": "For Break Glass channel deploys: must match CHG\\d{7} (e.g. CHG1234567). Validated by the Break Glass channel deployment process; not required for Default channel.",
             "DisplaySettings": {"Octopus.ControlType": "SingleLineText"},
         },
     }
@@ -260,7 +350,7 @@ def set_pci_ticket_variable(project: dict) -> None:
     else:
         var_set["Variables"].append(desired)
     o.put(f"/variables/{var_set_id}", var_set)
-    o.ok("project variable pci_change_ticket set (with prompt-on-release)")
+    o.ok("project variable pci_change_ticket set (optional prompt; validated in BG step)")
 
 
 def ensure_permanent_freeze(project_id: str, foundation: dict) -> None:
