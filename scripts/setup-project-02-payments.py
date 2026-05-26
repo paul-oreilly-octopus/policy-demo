@@ -52,39 +52,74 @@ def set_baseline_process(project: dict, foundation: dict) -> None:
     process = o.get(f"/deploymentprocesses/{project['DeploymentProcessId']}")
     cloud_prod = foundation["environments"]["Cloud-Prod"]
 
-    script = (
+    # Server-side prepare step ensures Dev/Test phases aren't empty — the
+    # mock deploy step is scoped to Cloud-Prod only, and Octopus refuses
+    # to create deployments where the target env has no matching step.
+    prepare_script = (
+        '$env = $OctopusParameters["Octopus.Environment.Name"]\n'
+        '$release = $OctopusParameters["Octopus.Release.Number"]\n'
+        'Write-Host "[MOCK BASELINE] Preparing payment-gateway $release for $env"\n'
+        'Write-Host "[MOCK BASELINE] !!! NO APPROVAL GATE — non-compliant baseline."\n'
+        'Start-Sleep -Seconds 1\n'
+    )
+    deploy_script = (
         '$target = $OctopusParameters["Octopus.Machine.Name"]\n'
         '$release = $OctopusParameters["Octopus.Release.Number"]\n'
         '$env = $OctopusParameters["Octopus.Environment.Name"]\n'
         'Write-Host "[MOCK] Deploying payment-gateway $release to $target ($env)"\n'
         'Start-Sleep -Seconds 2\n'
-        'Write-Host "[MOCK] !!! NO APPROVAL GATE — this is the non-compliant baseline."\n'
         'Write-Host "[MOCK] Deployment complete."\n'
     )
-    steps = [{
-        "Name": "Deploy to corp-payments-backend",
-        "PackageRequirement": "LetOctopusDecide",
-        "Properties": {"Octopus.Action.TargetRoles": "corp-backend"},
-        "Condition": "Success",
-        "StartTrigger": "StartAfterPrevious",
-        "Actions": [{
+    steps = [
+        {
+            "Name": "Prepare release",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Prepare release",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": prepare_script,
+                    "Octopus.Action.RunOnServer": "true",
+                },
+                "Packages": [],
+            }],
+        },
+        {
             "Name": "Deploy to corp-payments-backend",
-            "ActionType": "Octopus.Script",
-            "IsRequired": True,
-            "IsDisabled": False,
-            "Environments": [cloud_prod],
-            "ExcludedEnvironments": [],
-            "Channels": [],
-            "TenantTags": [],
-            "Properties": {
-                "Octopus.Action.Script.ScriptSource": "Inline",
-                "Octopus.Action.Script.Syntax": "PowerShell",
-                "Octopus.Action.Script.ScriptBody": script,
-                "Octopus.Action.RunOnServer": "false",
-            },
-            "Packages": [],
-        }],
-    }]
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {"Octopus.Action.TargetRoles": "corp-backend"},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Deploy to corp-payments-backend",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [cloud_prod],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": deploy_script,
+                    "Octopus.Action.RunOnServer": "false",
+                },
+                "Packages": [],
+            }],
+        },
+    ]
     if process.get("Steps") == steps:
         o.ok("baseline process up to date")
         return
