@@ -110,6 +110,21 @@ When the API surface seems to be missing a feature documented elsewhere, check `
 
 In this case the `compliance-policy-test-evaluation` toggle was disabled, hiding the policy-evaluation engine from the API. Authoring still worked through the UI/Git path. Future me: always grep feature-toggles when a feature seems missing.
 
+## Process templates: publish ≠ share (sharing is UI-only)
+
+A parsed/published template will load fine into the Platform Hub library but will NOT appear in any space's process editor until that template has been explicitly **shared** with the space. Publish and share are two different actions:
+
+| Action | Path | API support |
+|---|---|---|
+| Publish | `git push` to the hub repo containing the OCL file | implicit via Git sync |
+| Share with space | UI: Platform Hub → Process Templates → \<template\> → Sharing tab → add space | **none** — there is no REST API for this in 2026.2 |
+
+The sharing list is stored as a database relationship inside Octopus, deliberately *not* in the template OCL (so authors can't accidentally hand all spaces access via a Git commit). Setup scripts CANNOT automate sharing. After every new template is added to the hub repo, a human must visit the UI and toggle the share for each consuming space.
+
+Symptom: process editor's "Add step from Platform Hub" picker shows nothing (or shows old templates but not new ones). The newly-pushed templates exist but are not shared with the space you're editing in.
+
+**Fix:** UI → Platform Hub → Process Templates → open each template → Sharing tab → add the consuming space → Save.
+
 ## Process templates can't env-scope steps in OCL
 
 Process templates live in the hub repo and are space-agnostic. They're loaded/parsed BEFORE being applied to any consuming space, so the OCL parser has no environment list to resolve slugs against. Adding `environments = ["cloud-prod"]` (or `"test"`, `"markets"`, etc.) inside an action block fails at load time:
