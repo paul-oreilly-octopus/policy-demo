@@ -127,6 +127,18 @@ Affects every tenanted project in this demo (holiday-promo-blitz, customer-mobil
 
 Alternative: switch `TenantedDeploymentMode` to `"TenantedOrUntenanted"` so untenanted releases can flow through early phases. We chose the connect-all-envs approach because it preserves the cleaner "all deploys are per-tenant" demo narrative.
 
+## Every phase needs at least one matching step
+
+Companion gotcha to the previous one. Connecting tenants to all 4 lifecycle envs gets you past *release planning*, but **creating a deployment** still fails if the target env has no step that runs there:
+
+> "There are no steps to run when deploying releases of holiday-promo-blitz in the Default channel to the Dev environment for 'MMI-AU-Sydney'. This can happen if your deployment process is empty, or review the filters applied to the steps in your deployment process."
+
+If every step in the process is scoped via `action.environments = [<later-env>]`, then earlier phases of the lifecycle have nothing to run and Octopus refuses to create a no-op deployment.
+
+**Fix:** add a server-side "Prepare release" step at position 0 with `Environments: []` (no env filter — runs everywhere) and no target roles. It does a `Write-Host` of release/env/tenant and exits. Cheap, demonstrative, makes every phase non-empty.
+
+Applied to: holiday-promo-blitz (M1), customer-mobile-app (M3), crusty-croissant-pos (M5). loyalty-rewards-service (M4) already had the Verify FinOps Variables step with no env filter, so was naturally fine.
+
 ## API key file format
 
 `~/dev/claude/secrets/taniwha.octopus.app/api_key` is a YAML-ish file with named fields. Extract the value with:

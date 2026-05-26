@@ -30,12 +30,20 @@ PROJECT_DESCRIPTION = (
 )
 
 
+PREPARE_SCRIPT = """\
+$env = $OctopusParameters['Octopus.Environment.Name']
+$tenant = $OctopusParameters['Octopus.Deployment.Tenant.Name']
+$release = $OctopusParameters['Octopus.Release.Number']
+Write-Host "[MOCK BASELINE] Preparing crusty-croissant-pos $release for $env ($tenant)"
+Write-Host "[MOCK BASELINE] !!! NO GDPR DATA-RESIDENCY CHECK — baseline process."
+Start-Sleep -Seconds 1
+"""
+
 DEPLOY_SCRIPT = """\
 $store = $OctopusParameters['Octopus.Machine.Name']
 $tenant = $OctopusParameters['Octopus.Deployment.Tenant.Name']
 $release = $OctopusParameters['Octopus.Release.Number']
 Write-Host "[MOCK BASELINE] Deploying crusty-croissant-pos $release to $store ($tenant)"
-Write-Host "[MOCK BASELINE] !!! NO GDPR DATA-RESIDENCY CHECK — auditor would flag this."
 Start-Sleep -Seconds 2
 Write-Host "[MOCK BASELINE] Deployment complete."
 """
@@ -65,30 +73,56 @@ def ensure_project(foundation: dict) -> dict:
 def set_baseline_process(project: dict, foundation: dict) -> None:
     process = o.get(f"/deploymentprocesses/{project['DeploymentProcessId']}")
     markets = foundation["environments"]["Markets"]
-    steps = [{
-        "Name": "Deploy crusty-croissant-pos",
-        "PackageRequirement": "LetOctopusDecide",
-        "Properties": {"Octopus.Action.TargetRoles": "store"},
-        "Condition": "Success",
-        "StartTrigger": "StartAfterPrevious",
-        "Actions": [{
+    steps = [
+        {
+            "Name": "Prepare release",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Prepare release",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": PREPARE_SCRIPT,
+                    "Octopus.Action.RunOnServer": "true",
+                },
+                "Packages": [],
+            }],
+        },
+        {
             "Name": "Deploy crusty-croissant-pos",
-            "ActionType": "Octopus.Script",
-            "IsRequired": True,
-            "IsDisabled": False,
-            "Environments": [markets],
-            "ExcludedEnvironments": [],
-            "Channels": [],
-            "TenantTags": [],
-            "Properties": {
-                "Octopus.Action.Script.ScriptSource": "Inline",
-                "Octopus.Action.Script.Syntax": "PowerShell",
-                "Octopus.Action.Script.ScriptBody": DEPLOY_SCRIPT,
-                "Octopus.Action.RunOnServer": "false",
-            },
-            "Packages": [],
-        }],
-    }]
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {"Octopus.Action.TargetRoles": "store"},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Deploy crusty-croissant-pos",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [markets],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": DEPLOY_SCRIPT,
+                    "Octopus.Action.RunOnServer": "false",
+                },
+                "Packages": [],
+            }],
+        },
+    ]
     if process.get("Steps") == steps:
         o.ok("baseline process up to date")
         return

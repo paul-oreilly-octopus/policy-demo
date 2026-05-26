@@ -84,7 +84,19 @@ def set_deployment_process(project: dict, foundation: dict) -> None:
     process = o.get(f"/deploymentprocesses/{project['DeploymentProcessId']}")
     markets_env = foundation["environments"]["Markets"]
 
-    script_body = (
+    # Server-side "prepare" step runs in every phase so Dev/Test/Cloud-Prod
+    # have actual work to schedule. Octopus refuses to create a deployment
+    # if the chosen env has no matching steps — even on a tenanted project
+    # where the actual rollout is store-only.
+    prepare_script = (
+        '$env = $OctopusParameters["Octopus.Environment.Name"]\n'
+        '$tenant = $OctopusParameters["Octopus.Deployment.Tenant.Name"]\n'
+        '$version = $OctopusParameters["Octopus.Release.Number"]\n'
+        'Write-Host "[MOCK] Preparing promo asset $version for $env ($tenant)"\n'
+        'Start-Sleep -Seconds 1\n'
+        'Write-Host "[MOCK] Asset bundled and ready for rollout."\n'
+    )
+    deploy_script = (
         '$store = $OctopusParameters["Octopus.Machine.Name"]\n'
         '$env = $OctopusParameters["Octopus.Environment.Name"]\n'
         '$tenant = $OctopusParameters["Octopus.Deployment.Tenant.Name"]\n'
@@ -95,6 +107,32 @@ def set_deployment_process(project: dict, foundation: dict) -> None:
     )
 
     steps = [
+        {
+            "Name": "Prepare promo asset",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [
+                {
+                    "Name": "Prepare promo asset",
+                    "ActionType": "Octopus.Script",
+                    "IsRequired": True,
+                    "IsDisabled": False,
+                    "Environments": [],
+                    "ExcludedEnvironments": [],
+                    "Channels": [],
+                    "TenantTags": [],
+                    "Properties": {
+                        "Octopus.Action.Script.ScriptSource": "Inline",
+                        "Octopus.Action.Script.Syntax": "PowerShell",
+                        "Octopus.Action.Script.ScriptBody": prepare_script,
+                        "Octopus.Action.RunOnServer": "true",
+                    },
+                    "Packages": [],
+                }
+            ],
+        },
         {
             "Name": "Deploy promo asset",
             "PackageRequirement": "LetOctopusDecide",
@@ -114,13 +152,13 @@ def set_deployment_process(project: dict, foundation: dict) -> None:
                     "Properties": {
                         "Octopus.Action.Script.ScriptSource": "Inline",
                         "Octopus.Action.Script.Syntax": "PowerShell",
-                        "Octopus.Action.Script.ScriptBody": script_body,
+                        "Octopus.Action.Script.ScriptBody": deploy_script,
                         "Octopus.Action.RunOnServer": "false",
                     },
                     "Packages": [],
                 }
             ],
-        }
+        },
     ]
 
     if process.get("Steps") == steps:

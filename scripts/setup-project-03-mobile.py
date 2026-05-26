@@ -51,6 +51,16 @@ def set_baseline_process(project: dict, foundation: dict) -> None:
     cloud_prod = foundation["environments"]["Cloud-Prod"]
     markets = foundation["environments"]["Markets"]
 
+    # Server-side "prepare" step runs in Dev/Test (no targets) so those
+    # phases aren't empty for the tenanted release. Octopus rejects empty
+    # phases on tenanted projects.
+    script_prepare = (
+        '$env = $OctopusParameters["Octopus.Environment.Name"]\n'
+        '$tenant = $OctopusParameters["Octopus.Deployment.Tenant.Name"]\n'
+        '$release = $OctopusParameters["Octopus.Release.Number"]\n'
+        'Write-Host "[MOCK BASELINE] Preparing customer-mobile-app $release for $env ($tenant) — NO SCAN, baseline process."\n'
+        'Start-Sleep -Seconds 1\n'
+    )
     script_backend = (
         '$target = $OctopusParameters["Octopus.Machine.Name"]\n'
         '$release = $OctopusParameters["Octopus.Release.Number"]\n'
@@ -68,6 +78,30 @@ def set_baseline_process(project: dict, foundation: dict) -> None:
     )
 
     steps = [
+        {
+            "Name": "Prepare release",
+            "PackageRequirement": "LetOctopusDecide",
+            "Properties": {},
+            "Condition": "Success",
+            "StartTrigger": "StartAfterPrevious",
+            "Actions": [{
+                "Name": "Prepare release",
+                "ActionType": "Octopus.Script",
+                "IsRequired": True,
+                "IsDisabled": False,
+                "Environments": [],
+                "ExcludedEnvironments": [],
+                "Channels": [],
+                "TenantTags": [],
+                "Properties": {
+                    "Octopus.Action.Script.ScriptSource": "Inline",
+                    "Octopus.Action.Script.Syntax": "PowerShell",
+                    "Octopus.Action.Script.ScriptBody": script_prepare,
+                    "Octopus.Action.RunOnServer": "true",
+                },
+                "Packages": [],
+            }],
+        },
         {
             "Name": "Deploy backend (Cloud-Prod)",
             "PackageRequirement": "LetOctopusDecide",
