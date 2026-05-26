@@ -53,18 +53,31 @@ def ensure_project(foundation: dict) -> dict:
 
 
 def connect_tenants(project_id: str, tenants: dict, foundation: dict) -> None:
-    markets_env = foundation["environments"]["Markets"]
+    # Connect each tenant to ALL envs in the Standard Release lifecycle.
+    # Octopus requires a tenant connection at every phase of the lifecycle for
+    # a release to be planable on a fully-tenanted project, even if the
+    # deployment process only has steps that run in the final phase. The
+    # actual mock 'Deploy promo asset' step is scoped to Markets via
+    # action.environments — earlier phases become no-ops, but tenants must
+    # still be connected so Octopus can plan the release.
+    needed_envs = {
+        foundation["environments"]["Dev"],
+        foundation["environments"]["Test"],
+        foundation["environments"]["Cloud-Prod"],
+        foundation["environments"]["Markets"],
+    }
     for tenant_name, tenant_id in tenants["tenants"].items():
         tenant = o.get(f"/tenants/{tenant_id}")
         pe = tenant.get("ProjectEnvironments", {})
         current = set(pe.get(project_id, []))
-        if markets_env not in current:
-            pe[project_id] = sorted(current | {markets_env})
+        new_envs = current | needed_envs
+        if new_envs != current:
+            pe[project_id] = sorted(new_envs)
             tenant["ProjectEnvironments"] = pe
             o.put(f"/tenants/{tenant_id}", tenant)
-            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME} on Markets")
+            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME} on {sorted(new_envs - current)}")
         else:
-            o.ok(f"tenant {tenant_name} already connected to {PROJECT_NAME}")
+            o.ok(f"tenant {tenant_name} already connected to {PROJECT_NAME} (all 4 envs)")
 
 
 def set_deployment_process(project: dict, foundation: dict) -> None:

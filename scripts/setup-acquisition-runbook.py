@@ -52,6 +52,11 @@ $acquisitionTag    = "Acquisition/acquired-crusty"
 $marketsEnvId      = "{markets_env_id}"
 $projectIds        = @({connected_projects})
 
+# Tenants must be connected to every lifecycle phase env for release
+# planning to succeed on a fully-tenanted project. The mock deploy steps
+# only run in Markets, but Dev/Test/Cloud-Prod must still be connected.
+$allLifecycleEnvIds = @({all_lifecycle_env_ids})
+
 if (-not $apiKey) {{ throw "OctopusApiKey not set on Management project" }}
 
 $h = @{{ "X-Octopus-ApiKey" = $apiKey }}
@@ -111,23 +116,24 @@ if ($target) {{
 }}
 
 Write-Host ""
-Write-Host "==> Phase 3: connect tenant to demo projects"
+Write-Host "==> Phase 3: connect tenant to demo projects (all lifecycle envs)"
 foreach ($projId in $projectIds) {{
     $t = Invoke-Octo GET "/tenants/$($tenant.Id)"
     if (-not $t.ProjectEnvironments) {{ $t | Add-Member ProjectEnvironments @{{}} -Force }}
     $current = @()
     if ($t.ProjectEnvironments.$projId) {{ $current = @($t.ProjectEnvironments.$projId) }}
-    if ($current -notcontains $marketsEnvId) {{
-        $newList = @($current) + @($marketsEnvId) | Select-Object -Unique
-        # PowerShell quirk: we need to convert to hashtable for ConvertTo-Json
+    $desired = @($current + $allLifecycleEnvIds | Select-Object -Unique | Sort-Object)
+    $missing = $desired | Where-Object {{ $current -notcontains $_ }}
+    if ($missing) {{
+        # Rebuild ProjectEnvironments as a hashtable for clean JSON serialisation
         $pe = @{{}}
         $t.ProjectEnvironments.PSObject.Properties | ForEach-Object {{ $pe[$_.Name] = @($_.Value) }}
-        $pe[$projId] = @($newList)
+        $pe[$projId] = $desired
         $t.ProjectEnvironments = $pe
         Invoke-Octo PUT "/tenants/$($tenant.Id)" $t | Out-Null
-        Write-Host "    Connected to project $projId"
+        Write-Host "    Connected to project $projId on envs: $($missing -join ', ')"
     }} else {{
-        Write-Host "    Already connected to project $projId"
+        Write-Host "    Already connected to project $projId (all envs)"
     }}
 }}
 
@@ -230,12 +236,23 @@ def main() -> None:
 
     project_ids = ", ".join(f'"{projects[p]["ProjectId"]}"' for p in needed_projects)
 
+    # All envs from the Standard Release lifecycle (Dev/Test/Cloud-Prod/Markets)
+    # — the runbook connects Crusty to each of these for each project.
+    lifecycle_env_ids = [
+        foundation["environments"]["Dev"],
+        foundation["environments"]["Test"],
+        foundation["environments"]["Cloud-Prod"],
+        foundation["environments"]["Markets"],
+    ]
+    all_lifecycle_env_ids = ", ".join(f'"{e}"' for e in lifecycle_env_ids)
+
     script = SCRIPT_TEMPLATE.format(
         space_id=foundation["SpaceId"],
         tenant_name=TENANT_NAME,
         target_name=TARGET_NAME,
         markets_env_id=foundation["environments"]["Markets"],
         connected_projects=project_ids,
+        all_lifecycle_env_ids=all_lifecycle_env_ids,
     )
 
     mgmt = o.get(f"/projects/{projects['Management']['ProjectId']}")

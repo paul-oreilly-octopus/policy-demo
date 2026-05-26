@@ -126,20 +126,28 @@ def set_baseline_process(project: dict, foundation: dict) -> None:
 
 
 def connect_tenants(project_id: str, tenants: dict, foundation: dict) -> None:
-    markets_env = foundation["environments"]["Markets"]
-    cloud_prod_env = foundation["environments"]["Cloud-Prod"]
+    # Connect each tenant to ALL envs in the lifecycle (Dev, Test,
+    # Cloud-Prod, Markets). Tenants must be connected at every phase or
+    # release planning fails on a fully-tenanted project, even when the
+    # earlier phases have no work to do.
+    needed_envs = {
+        foundation["environments"]["Dev"],
+        foundation["environments"]["Test"],
+        foundation["environments"]["Cloud-Prod"],
+        foundation["environments"]["Markets"],
+    }
     for tenant_name, tenant_id in tenants["tenants"].items():
         tenant = o.get(f"/tenants/{tenant_id}")
         pe = tenant.get("ProjectEnvironments", {})
         envs_for_project = set(pe.get(project_id, []))
-        new_envs = envs_for_project | {markets_env, cloud_prod_env}
+        new_envs = envs_for_project | needed_envs
         if new_envs != envs_for_project:
             pe[project_id] = sorted(new_envs)
             tenant["ProjectEnvironments"] = pe
             o.put(f"/tenants/{tenant_id}", tenant)
-            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME}")
+            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME} on {sorted(new_envs - envs_for_project)}")
         else:
-            o.ok(f"tenant {tenant_name} already connected")
+            o.ok(f"tenant {tenant_name} already connected to {PROJECT_NAME} (all 4 envs)")
 
 
 def main() -> None:

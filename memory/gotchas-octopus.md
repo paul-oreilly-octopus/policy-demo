@@ -110,6 +110,23 @@ When the API surface seems to be missing a feature documented elsewhere, check `
 
 In this case the `compliance-policy-test-evaluation` toggle was disabled, hiding the policy-evaluation engine from the API. Authoring still worked through the UI/Git path. Future me: always grep feature-toggles when a feature seems missing.
 
+## Tenanted projects need tenant connections at every lifecycle phase
+
+A project with `TenantedDeploymentMode = "Tenanted"` cannot have a release created unless **at least one tenant is connected to every lifecycle phase's environment** — including phases that will be no-ops for that tenant.
+
+Symptom: `POST /releases` succeeds (release ID is allocated) but the UI shows:
+
+> "Cannot deploy to any of the connected tenants in this phase of the lifecycle"
+> "Releases of this project can only be deployed to tenants, but there are no tenants connected to any environments in the current lifecycle phase."
+
+This fires the moment Octopus tries to plan the first phase (Dev) — if no tenant is connected to Dev for that project, planning fails even when the project's deployment steps are scoped to a later env (e.g. `action.environments = ["markets"]`).
+
+**Fix:** for each tenanted project, connect each participating tenant to **every** environment in the lifecycle, not just the env(s) where actual deploy steps will run. The mock steps still skip the no-op phases via `action.environments`, but the tenant-to-env wiring satisfies Octopus's release-planning check.
+
+Affects every tenanted project in this demo (holiday-promo-blitz, customer-mobile-app, loyalty-rewards-service, and the Crusty tenant added live by the Acquire Crusty Croissant runbook). All four setup scripts and the runbook were updated to connect tenants to the full 4-env lifecycle.
+
+Alternative: switch `TenantedDeploymentMode` to `"TenantedOrUntenanted"` so untenanted releases can flow through early phases. We chose the connect-all-envs approach because it preserves the cleaner "all deploys are per-tenant" demo narrative.
+
 ## API key file format
 
 `~/dev/claude/secrets/taniwha.octopus.app/api_key` is a YAML-ish file with named fields. Extract the value with:

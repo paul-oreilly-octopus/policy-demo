@@ -160,16 +160,28 @@ def set_baseline_process(project: dict, foundation: dict) -> None:
 
 
 def connect_tenants(project_id: str, tenants: dict, foundation: dict) -> None:
-    cloud_prod = foundation["environments"]["Cloud-Prod"]
+    # Connect each tenant to ALL envs in the lifecycle. The project's actual
+    # backend deploy step only runs in Cloud-Prod, but a fully-tenanted
+    # project still needs tenant connections at every lifecycle phase for
+    # release planning to succeed.
+    needed_envs = {
+        foundation["environments"]["Dev"],
+        foundation["environments"]["Test"],
+        foundation["environments"]["Cloud-Prod"],
+        foundation["environments"]["Markets"],
+    }
     for tenant_name, tenant_id in tenants["tenants"].items():
         tenant = o.get(f"/tenants/{tenant_id}")
         pe = tenant.get("ProjectEnvironments", {})
         envs_for_project = set(pe.get(project_id, []))
-        if cloud_prod not in envs_for_project:
-            pe[project_id] = sorted(envs_for_project | {cloud_prod})
+        new_envs = envs_for_project | needed_envs
+        if new_envs != envs_for_project:
+            pe[project_id] = sorted(new_envs)
             tenant["ProjectEnvironments"] = pe
             o.put(f"/tenants/{tenant_id}", tenant)
-            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME}")
+            o.ok(f"connected tenant {tenant_name} to {PROJECT_NAME} on {sorted(new_envs - envs_for_project)}")
+        else:
+            o.ok(f"tenant {tenant_name} already connected to {PROJECT_NAME} (all 4 envs)")
 
 
 def set_tenant_finops_variables(project_id: str, tenants: dict, foundation: dict) -> None:
