@@ -110,6 +110,48 @@ When the API surface seems to be missing a feature documented elsewhere, check `
 
 In this case the `compliance-policy-test-evaluation` toggle was disabled, hiding the policy-evaluation engine from the API. Authoring still worked through the UI/Git path. Future me: always grep feature-toggles when a feature seems missing.
 
+## Policies can't see inside consumed process templates
+
+When a project consumes a hub process template, the template's internal steps are NOT inlined into the project's deployment process. Instead, a single step appears in `input.Steps` with:
+
+- `step.ActionType == "Octopus.ProcessTemplate"`
+- `step.Source.Type == "Process Template"`
+- `step.Source.SlugOrId == "<template-slug>"`
+
+The template's contents — the Security Scan step, the Manual Intervention, the GDPR check, etc. — are not visible to the policy engine. Policies that check for inline step names or `Octopus.Manual` actions will MISS the same step when it's provided by a template.
+
+**Fix pattern:** a step-checking policy needs TWO allow rules:
+
+1. Match an inline step (original logic — name contains "Security Scan", `ActionType == "Octopus.Manual"`, etc.)
+2. Match a template-reference step whose `Source.SlugOrId` is in a whitelist of templates known to provide the required step
+
+```rego
+security_scan_templates := {"governed-customer-app-deploy"}
+
+result := {"allowed": true} if {
+    some step in input.Steps
+    contains(step.Name, "Security Scan")
+    not step.Id in input.SkippedSteps
+}
+
+result := {"allowed": true} if {
+    some step in input.Steps
+    step.Source.Type == "Process Template"
+    step.Source.SlugOrId in security_scan_templates
+    not step.Id in input.SkippedSteps
+}
+```
+
+The whitelist is explicit and auditable — adding a new compliant template is a one-line policy change with a Git commit attached.
+
+Variable-checking policies (e.g. `required-finops-variables` which reads `input.Variables.cost_centre`) are unaffected — they evaluate post-resolution, so values set by the project, by tenant scope, or by template parameter substitution are all visible the same way.
+
+## Consuming a process template doesn't remove existing inline steps
+
+When you add a Platform Hub process template to a project's deployment process, the new template step is **appended** to the existing steps — it doesn't replace them. If the project had a baseline process before, those steps are still there alongside the template reference. The deployment will run the template AND the baseline.
+
+For demos where the "fix" is to switch from baseline to template, the operator has to manually delete the baseline steps after adding the template. Otherwise the audit log will show both ran. Worth noting in the demo script.
+
 ## Process templates: publish ≠ share (sharing is UI-only)
 
 A parsed/published template will load fine into the Platform Hub library but will NOT appear in any space's process editor until that template has been explicitly **shared** with the space. Publish and share are two different actions:
