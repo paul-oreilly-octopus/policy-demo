@@ -110,6 +110,24 @@ When the API surface seems to be missing a feature documented elsewhere, check `
 
 In this case the `compliance-policy-test-evaluation` toggle was disabled, hiding the policy-evaluation engine from the API. Authoring still worked through the UI/Git path. Future me: always grep feature-toggles when a feature seems missing.
 
+## Process templates can't env-scope steps in OCL
+
+Process templates live in the hub repo and are space-agnostic. They're loaded/parsed BEFORE being applied to any consuming space, so the OCL parser has no environment list to resolve slugs against. Adding `environments = ["cloud-prod"]` (or `"test"`, `"markets"`, etc.) inside an action block fails at load time:
+
+> "Error mapping from slugs to IDs. ProcessTemplate.Steps[N].Actions[0].Environments[0] has unknown slug 'cloud-prod'"
+
+**Fix:** drop `environments = [...]` from process-template action blocks entirely. Express env-scoping through target roles + the consuming project's lifecycle instead. If a step needs targets, its `Octopus.Action.TargetRoles` parameter (typically pointed at a role like `corp-backend` or `store`) constrains where it runs because those roles only exist on targets in specific envs. Server-side steps (manual intervention, script with `RunOnServer=true`, no targets) run in every phase of the consuming project's lifecycle.
+
+**Implication:** a manual-intervention step in a hub template will fire at *every* env the consuming project's lifecycle includes — not just Cloud-Prod. That's strictly more governance than originally intended (audit-friendly) but worth knowing for demo pacing.
+
+## Process templates: every action needs `worker_pool_variable` set
+
+The "Every step needs a worker pool" note already in this file (from the process-templates best-practices) bites even for `Octopus.Manual` actions that don't actually need a worker. Setting `worker_pool_variable = ""` causes:
+
+> "There was an error trying to parse the file '.octopus/...'. A step must specify a worker pool parameter"
+
+**Fix:** set `worker_pool_variable = "worker_pool"` (pointing at the standard `worker_pool` parameter every template declares) on EVERY action — even manual interventions. The runtime ignores it for `Octopus.Manual` but the OCL validator requires it.
+
 ## Tenanted projects need tenant connections at every lifecycle phase
 
 A project with `TenantedDeploymentMode = "Tenanted"` cannot have a release created unless **at least one tenant is connected to every lifecycle phase's environment** — including phases that will be no-ops for that tenant.
