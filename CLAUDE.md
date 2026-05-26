@@ -126,14 +126,15 @@ Requirements to use the Break Glass channel on either project:
 
 ### Teams
 
-| Team | Roles | Purpose |
+| Team | Roles (all PolicyDemo-scoped) | Purpose |
 |---|---|---|
-| `Demo Read-Only` | Project Viewer, Environment Viewer | Stakeholder observers |
-| `Demo Full Authority` | Project Lead, Project Deployer, Runbook Producer, Tenant Manager | SRE / operators |
-| `Demo Emergency Responders` | Project Deployer, can complete break-glass interventions on #1 | Override the rolling freeze |
-| `PCI Change Approvers` | Can complete break-glass intervention on #7 | Approve PCI vault deploys |
-| `Customer Demo Viewers` | Project Viewer + Runbook Consumer scoped to Management only | Audience accounts — read processes, run reset runbook, cannot edit |
-| `Mock Release Service Account` (team) | Holds `svc-policy-demo` user, scoped roles | Runbook automation |
+| `Prod Change Approvers` | Project deployer | Approve manual interventions on Cloud-Prod via governed-cloud-prod-deploy (M2) |
+| `Demo Emergency Responders` | Project deployer | Break-glass authority for rolling-freeze windows (M1, optional in current demo) |
+| `PCI Change Approvers` | Project deployer | Approve break-glass deploys on the PCI vault (M7) |
+| `Customer Demo Viewers` | Project viewer + Environment viewer (space-wide); Runbook consumer (scoped to Management project only) | **External customer accounts.** Read-only on the space + can run demo runbooks (`Acquire Crusty Croissant`, `Reset Demo State`, `Refresh Demo Freeze`). Cannot edit any process — cannot exfiltrate sensitive variables. They see *only* the PolicyDemo space. Add customers via the Octopus UI. |
+| `Policy Demo Service Account` | Space manager (space-wide) | Holds `svc-policy-demo` user. Runbook automation only. |
+
+**Note on Platform Hub visibility:** `PlatformHubView` is a system-level permission only granted by `System manager` / `System administrator` roles, both of which are too broad for customer accounts. Customers in `Customer Demo Viewers` see policy/template *effects* within PolicyDemo (audit log entries, applied templates in deployment processes) but **not** the Platform Hub admin UI. For customers to read the policy/template OCL itself, share the `taniwha.platform_hub` GitHub repo with them as a Read collaborator — the Git source is the canonical artefact.
 
 ### Runbooks (all on `Management` project, Admin group)
 

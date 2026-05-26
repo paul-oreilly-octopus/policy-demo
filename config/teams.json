@@ -2,6 +2,7 @@
   "teams": {
     "Prod Change Approvers": "Teams-82",
     "Demo Emergency Responders": "Teams-83",
-    "PCI Change Approvers": "Teams-84"
+    "PCI Change Approvers": "Teams-84",
+    "Customer Demo Viewers": "Teams-101"
   }
 }
